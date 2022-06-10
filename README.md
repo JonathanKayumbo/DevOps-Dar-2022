@@ -1,2 +1,2 @@
-# DevOps-Dar-2022
-Demo Repository 
+# DevOps-projects
+This repository contains all fun DevOps project I ave done over the years 
