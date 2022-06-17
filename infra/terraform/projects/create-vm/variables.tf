@@ -1,9 +1,19 @@
-variable "resource_group_name_prefix" {
-  default       = "rg"
-  description   = "Prefix of the resource group name that's combined with a random ID so name is unique in your Azure subscription."
+variable "num_jenkinsagents" {
+  type    = number
+  default = 1
 }
 
-variable "resource_group_location" {
-  default       = "northwest"
-  description   = "Location of the resource group."
+variable "jenkinsagents_size" {
+  type    =  string
+  default = "Standard_D2s_v3"
+}
+
+variable "jenkinsagents_disksize" {
+  type    =  number
+  default = 200
+}
+
+variable "keyvault_name"{
+  type    =   string
+  default =   "jenkinsCredentials"
 }

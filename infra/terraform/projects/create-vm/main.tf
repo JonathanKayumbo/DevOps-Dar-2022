@@ -1,112 +1,72 @@
-resource "random_pet" "rg-name" {
-  prefix    = var.resource_group_name_prefix
+locals {
+  common_tags = {
+    dept            = "infra"
+    env             = terraform.workspace
+    managed_by      = "terraform"
+    managed_by_team = "avengers"
+    team            = "av"
+    tf_project      = "jenkinsagent"
+  }
+  username = "ci"
 }
+resource "azurerm_resource_group" "jenkinsagents" {
+  name     = "${terraform.workspace}-av-jenkinsagent"
+  location = "North Europe"
 
-resource "azurerm_resource_group" "rg" {
-  name      = random_pet.rg-name.id
-  location  = var.resource_group_location
+  tags = merge(
+    local.common_tags,
+    { description = "Resource group for Jenkins Agents" }
+  )
 }
-
-# Create virtual network
-resource "azurerm_virtual_network" "myterraformnetwork" {
-  name                = "myVnet"
-  address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-}
-
-# Create subnet
-resource "azurerm_subnet" "myterraformsubnet" {
-  name                 = "mySubnet"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.myterraformnetwork.name
-  address_prefixes     = ["10.0.1.0/24"]
-}
-
-# Create public IPs
-resource "azurerm_public_ip" "myterraformpublicip" {
-  name                = "myPublicIP"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "azurerm_public_ip" "public_ip" {
+  name                = "vm_public_ip"
+  resource_group_name = azurerm_resource_group.jenkinsagents.name
+  location            = azurerm_resource_group.jenkinsagents.location
   allocation_method   = "Dynamic"
 }
 
-# Create Network Security Group and rule
-resource "azurerm_network_security_group" "myterraformnsg" {
-  name                = "myNetworkSecurityGroup"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-
-  security_rule {
-    name                       = "SSH"
-    priority                   = 1001
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-}
-
-# Create network interface
-resource "azurerm_network_interface" "myterraformnic" {
-  name                = "myNIC"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "azurerm_network_interface" "jenkinsagents_nic" {
+  name                          = "${terraform.workspace}-av-jenkinsagent-${format("%02s", count.index + 1)}-nic"
+  location                      = azurerm_resource_group.jenkinsagents.location
+  resource_group_name           = azurerm_resource_group.jenkinsagents.name
+  count                         = var.num_jenkinsagents
+  enable_accelerated_networking = true
 
   ip_configuration {
-    name                          = "myNicConfiguration"
-    subnet_id                     = azurerm_subnet.myterraformsubnet.id
+    name                          = "internal"
+    subnet_id                     = data.azurerm_subnet.av_subnet.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.myterraformpublicip.id
-  }
-}
-
-# Connect the security group to the network interface
-resource "azurerm_network_interface_security_group_association" "example" {
-  network_interface_id      = azurerm_network_interface.myterraformnic.id
-  network_security_group_id = azurerm_network_security_group.myterraformnsg.id
-}
-
-# Generate random text for a unique storage account name
-resource "random_id" "randomId" {
-  keepers = {
-    # Generate a new ID only when a new resource group is defined
-    resource_group = azurerm_resource_group.rg.name
+    public_ip_address_id = azurerm_public_ip.public_ip.id
   }
 
-  byte_length = 8
-}
-
-# Create storage account for boot diagnostics
-resource "azurerm_storage_account" "mystorageaccount" {
-  name                     = "diag${random_id.randomId.hex}"
-  location                 = azurerm_resource_group.rg.location
-  resource_group_name      = azurerm_resource_group.rg.name
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-}
-
-# Create (and display) an SSH key
-resource "tls_private_key" "example_ssh" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
+  tags = merge(
+    local.common_tags,
+    { description = "Network interface for ${terraform.workspace}-av-jenkinsagents-${format("%02s", count.index + 1)}" }
+  )
 }
 
 # Create virtual machine
-resource "azurerm_linux_virtual_machine" "myterraformvm" {
-  name                  = "myVM"
-  location              = azurerm_resource_group.rg.location
-  resource_group_name   = azurerm_resource_group.rg.name
-  network_interface_ids = [azurerm_network_interface.myterraformnic.id]
-  size                  = "Standard_DS1_v2"
+resource "azurerm_linux_virtual_machine" "jenkinsagents" {
+  name                = "${terraform.workspace}-av-da-${format("%02s", count.index + 1)}"
+  resource_group_name = azurerm_resource_group.jenkinsagents.name
+  location            = azurerm_resource_group.jenkinsagents.location
+  size                = var.jenkinsagents_size
+  admin_username      = local.username
+  admin_password      = "${data.azurerm_key_vault_secret.vmpassword.value}"
+  network_interface_ids = [
+    azurerm_network_interface.jenkinsagents_nic[count.index].id,
+  ]
+  count = var.num_jenkinsagents
+
+  admin_ssh_key {
+    username   = local.username
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
 
   os_disk {
-    name                 = "myOsDisk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
+    storage_account_type = "Standard_LRS"
+    disk_size_gb         = 128
   }
 
   source_image_reference {
@@ -115,17 +75,8 @@ resource "azurerm_linux_virtual_machine" "myterraformvm" {
     sku       = "18.04-LTS"
     version   = "latest"
   }
-
-  computer_name                   = "myvm"
-  admin_username                  = "azureuser"
-  disable_password_authentication = true
-
-  admin_ssh_key {
-    username   = "azureuser"
-    public_key = tls_private_key.example_ssh.public_key_openssh
-  }
-
-  boot_diagnostics {
-    storage_account_uri = azurerm_storage_account.mystorageaccount.primary_blob_endpoint
-  }
+  tags = merge(
+  local.common_tags,
+  { description = "VM Machine for ${terraform.workspace}-av-jenkinsagents-${format("%02s", count.index + 1)}" }
+)
 }
