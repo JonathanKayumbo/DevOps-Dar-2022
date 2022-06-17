@@ -1,0 +1,105 @@
+def STDLIB
+
+pipeline {
+    agent none
+    stages {
+        stage('Build') {
+            agent {
+                docker {
+                    image 'php:7-cli'
+                }
+            }
+            steps {
+                script {
+                    // load a standardized jenkins library
+                    STDLIB = load 'pipelines-library/stdLibrary.groovy'
+                }
+
+                sh 'printenv | sort -n'
+                echo 'Hello, PHP 7 CLI >>'
+                sh 'php -m'
+                /*
+                script {
+                    echo STDLIB.COLOR_MAP['SUCCESS']
+                }
+                */
+            }
+        }
+        stage('Test') {
+            parallel {
+                stage ('Java Unit Tests'){
+                    agent {
+                        docker {
+                            image 'openjdk:8-jre'
+                        }
+                    }
+                    steps {
+                        echo 'Hello, JDK >>'
+                        sh 'java -version'
+                        script {
+                            STDLIB.releaseTag()
+                        }
+                    }
+                }
+                stage ('Dockerized Tests'){
+                    agent {
+                        docker {
+                            image 'docker:latest'
+                            args '-v /var/run/docker.sock:/var/run/docker.sock'
+                        }
+                    }
+                    when {
+                        branch 'develop'
+                    }
+                    steps {
+                        script {
+                            if(env.BRANCH_NAME=='develop'){
+                                echo 'Hello, Docker in Develop Branch >>'
+                            }else if(env.BRANCH_NAME=~/PR-/){
+                                echo 'Hello, Docker in PR Branch >>'
+                            }else{
+                                echo 'Hello, Docker in Other Branch >>'
+                            }
+                            sh 'docker info'
+                        }
+                    }
+                }
+                stage ('Docker Compose Tests'){
+                    agent {
+                        docker {
+                            image 'docker/compose:1.24.0'
+                            args '-v /var/run/docker.sock:/var/run/docker.sock'
+                        }
+                    }
+                    steps {
+                        script {
+                            switch(env.BRANCH_NAME){
+                                case "develop":
+                                    echo 'Hello, Docker-Compose in Develop Branch >>'
+                                case ~/PR-/:
+                                    echo 'Hello, Docker-Compose in PR Branch >>'
+                                //default:
+                                //    echo 'Hello, Docker-Compose in Other Branch >>'
+                            }
+                        }
+                        //sh 'docker-compose help'
+                    }
+                }
+            }
+        }
+        stage('Deploy') {
+            agent {
+                docker {
+                    image 'python:alpine'
+                }
+            }
+            steps {
+                echo 'Hello, PYTHON >>'
+                sh 'python -V'
+                script {
+                    STDLIB.artifactGen()
+                }
+            }
+        }
+    }
+}
