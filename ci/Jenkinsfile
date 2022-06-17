@@ -6,7 +6,7 @@ pipeline {
         stage('Build') {
             agent {
                 docker {
-                    image 'php:7-cli'
+                    image 'php:7.4-cli'
                 }
             }
             steps {
