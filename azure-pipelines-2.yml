@@ -53,7 +53,7 @@ stages:
     - task: KubernetesManifest@0
       inputs:
         action: 'createSecret'
-        kubernetesServiceConnection: 'jk1650-aks-cluster'
+        kubernetesServiceConnection: 'jk1650-aks-cluster-rg'
         namespace: 'default'
         secretType: 'dockerRegistry'
         secretName: '$(acrsecret)'
@@ -61,7 +61,7 @@ stages:
     - task: KubernetesManifest@0
       inputs:
         action: 'deploy'
-        kubernetesServiceConnection: 'jk1650-aks-cluster'
+        kubernetesServiceConnection: 'jk1650-aks-cluster-rg'
         namespace: 'default'
         manifests: |
           $(Pipeline.Workspace)/manifests/deployment.yml
