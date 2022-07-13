@@ -1,6 +1,6 @@
-resource_group_name = "jk1650-aks-cluster-rg"
+resource_group_name = "myname-aks-cluster-rg"
 location = "northeurope"
-cluster_name = "jk1650-aks-cluster"
+cluster_name = "myname-aks-cluster"
 kubernetes_version = "1.22.4"
 system_node_count = 4
-acr_name          = "jk1650acr"
+acr_name          = "mynameacr"
